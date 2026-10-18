@@ -15,17 +15,31 @@ http.createServer((req,res)=>{
     if(url.pathname==='/client.js')return send(200,'text/javascript; charset=utf-8',client);
     if(url.pathname==='/favicon.ico')return send(204,'image/x-icon','');
     if(url.pathname==='/health')return json(200,{ok:true,release,maxParty,maxBody});
+    if(url.pathname==='/diagnostic/raw-url')return json(200,{requestUrl:req.url,pathname:url.pathname,search:url.search});
+    if(url.pathname==='/diagnostic/url-params') {
+      const value=new URL('/?tag=x&tag=y&space=a+b','http://fixture.local');
+      return json(200,{get:value.searchParams.get('tag'),all:value.searchParams.getAll('tag'),space:value.searchParams.get('space'),text:value.searchParams.toString()});
+    }
+    if(url.pathname==='/diagnostic/params-literal') {
+      const value=new URLSearchParams('tag=x&tag=y&space=a+b');
+      return json(200,{type:typeof value,getType:typeof value.get,get:value.get('tag'),all:value.getAll('tag'),space:value.get('space'),text:value.toString()});
+    }
+    if(url.pathname==='/diagnostic/params-append') {
+      const value=new URLSearchParams();value.append('z','9');value.append('tag','x');value.append('tag','y');value.append('a','1');value.sort();
+      return json(200,{all:value.getAll('tag'),text:value.toString(),missing:value.get('missing')});
+    }
     if(url.pathname==='/api/echo')return json(200,echo(url.search));
     if(url.pathname==='/receipt') {const result=parse(url.search);return send(result.ok?200:422,'text/html; charset=utf-8',result.ok?receipt(result):failure(result));}
     return json(404,{error:'not_found',release});
   }
   if(req.method!=='POST')return send(405,'application/json','{"error":"method_not_allowed"}',{'allow':'GET, POST'});
-  if(url.pathname!=='/rsvp'&&url.pathname!=='/api/rsvp')return json(404,{error:'not_found',release});
+  if(url.pathname!=='/rsvp'&&url.pathname!=='/api/rsvp'&&url.pathname!=='/diagnostic/body')return json(404,{error:'not_found',release});
   if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/x-www-form-urlencoded')return json(415,{error:'unsupported_media_type',release});
   const chunks=[];let bytes=0;
   req.on('data',chunk=>{bytes+=chunk.length;if(bytes>maxBody){json(413,{error:'body_too_large',maxBody,release});return;}chunks.push(chunk);});
   req.on('end',()=>{
     if(sent)return;
+    if(url.pathname==='/diagnostic/body')return json(200,{bytes,utf8:Buffer.concat(chunks).toString('utf8'),release});
     const result=parse(Buffer.concat(chunks).toString('utf8'));
     if(url.pathname==='/api/rsvp')return json(result.ok?201:422,result);
     if(!result.ok)return send(422,'text/html; charset=utf-8',failure(result));
